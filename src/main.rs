@@ -1,4 +1,5 @@
 mod binance;
+mod logger;
 mod orderbook;
 mod strategy;
 

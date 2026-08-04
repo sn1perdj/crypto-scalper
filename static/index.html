@@ -81,11 +81,14 @@
         <div id="no-position">No active position</div>
         <div id="position-data" style="display: none;">
             <div class="data-row"><span>Side:</span> <span id="pos-side" class="large-val">---</span></div>
+            <div class="data-row"><span>Leverage:</span> <span id="pos-leverage">---</span></div>
+            <div class="data-row"><span>Margin:</span> <span id="pos-margin">---</span></div>
             <div class="data-row"><span>Entry Price:</span> <span id="pos-entry">---</span></div>
             <div class="data-row"><span>Current Price:</span> <span id="pos-current">---</span></div>
             <div class="data-row"><span>Quantity:</span> <span id="pos-qty">---</span></div>
-            <div class="data-row"><span>Unrealized PNL:</span> <span id="pos-pnl">---</span></div>
-            <div id="countdown">10</div>
+            <div class="data-row"><span>Net PnL:</span> <span id="pos-pnl" class="large-val">---</span></div>
+            <div class="data-row"><span>Return (ROE %):</span> <span id="pos-roe">---</span></div>
+            <div class="data-row"><span>Elapsed:</span> <span id="pos-elapsed">0s</span></div>
         </div>
     </div>
 
@@ -107,10 +110,13 @@
             <thead>
                 <tr style="border-bottom: 1px solid var(--border);">
                     <th>Side</th>
+                    <th>Leverage</th>
                     <th>Entry</th>
                     <th>Exit</th>
-                    <th>Invested</th>
-                    <th>PNL</th>
+                    <th>Margin</th>
+                    <th>Fee</th>
+                    <th>Net PNL</th>
+                    <th>Return %</th>
                 </tr>
             </thead>
             <tbody id="closed-trades-list">
@@ -167,19 +173,28 @@
                 document.getElementById('no-position').style.display = 'none';
                 document.getElementById('position-data').style.display = 'block';
                 
+                const pos = data.position;
                 const sideEl = document.getElementById('pos-side');
-                sideEl.innerText = data.position.side;
-                sideEl.className = data.position.side === 'LONG' ? "large-val up" : "large-val down";
-                
-                document.getElementById('pos-entry').innerText = data.position.entry_price.toFixed(2);
+                sideEl.innerText = pos.side;
+                sideEl.className = pos.side === 'LONG' ? "large-val up" : "large-val down";
+
+                document.getElementById('pos-leverage').innerText = `${pos.leverage || 5}x`;
+                document.getElementById('pos-margin').innerText = `$${(pos.margin_usdt || 10).toFixed(2)} USDT`;
+                document.getElementById('pos-entry').innerText = pos.entry_price.toFixed(2);
                 document.getElementById('pos-current').innerText = data.btc_price.toFixed(2);
-                document.getElementById('pos-qty').innerText = data.position.quantity;
-                
+                document.getElementById('pos-qty').innerText = pos.quantity.toFixed(6);
+
                 const pnlEl = document.getElementById('pos-pnl');
-                pnlEl.innerText = data.position.unrealized_pnl.toFixed(4) + ' USDT';
-                pnlEl.className = data.position.unrealized_pnl > 0 ? "up" : "down";
-                
-                document.getElementById('countdown').innerText = data.position.remaining_seconds + "...";
+                const netPnl = pos.net_unrealized_pnl !== undefined ? pos.net_unrealized_pnl : (pos.unrealized_pnl || 0);
+                pnlEl.innerText = `${netPnl >= 0 ? '+' : ''}${netPnl.toFixed(4)} USDT`;
+                pnlEl.className = netPnl >= 0 ? "large-val up" : "large-val down";
+
+                const roeEl = document.getElementById('pos-roe');
+                const roe = pos.unrealized_roe_pct || 0;
+                roeEl.innerText = `${roe >= 0 ? '+' : ''}${roe.toFixed(2)}%`;
+                roeEl.className = roe >= 0 ? "up" : "down";
+
+                document.getElementById('pos-elapsed').innerText = pos.elapsed_seconds + "s";
             } else {
                 document.getElementById('no-position').style.display = 'block';
                 document.getElementById('position-data').style.display = 'none';
@@ -205,12 +220,18 @@
                 const tradesHtml = data.closed_trades.map(t => {
                     const pnlClass = t.pnl > 0 ? "up" : "down";
                     const sideClass = t.side === 'LONG' ? "up" : "down";
+                    const lev = t.leverage ? `${t.leverage}x` : '10x';
+                    const fee = t.fee ? `$${t.fee.toFixed(4)}` : '$0.0000';
+                    const pct = t.pnl_percent ? `${t.pnl_percent > 0 ? '+' : ''}${t.pnl_percent.toFixed(2)}%` : '0.00%';
                     return `<tr>
                         <td class="${sideClass}">${t.side}</td>
+                        <td>${lev}</td>
                         <td>${t.entry_price.toFixed(2)}</td>
                         <td>${t.exit_price.toFixed(2)}</td>
                         <td>$${t.invested.toFixed(2)}</td>
+                        <td>${fee}</td>
                         <td class="${pnlClass}">${t.pnl > 0 ? '+' : ''}${t.pnl.toFixed(4)} USDT</td>
+                        <td class="${pnlClass}">${pct}</td>
                     </tr>`;
                 }).join('');
                 document.getElementById('closed-trades-list').innerHTML = tradesHtml;

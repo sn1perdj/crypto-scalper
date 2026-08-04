@@ -22,10 +22,6 @@ impl LocalOrderBook {
         }
     }
 
-    pub fn is_synced(&self) -> bool {
-        self.synced
-    }
-
     pub fn init_from_snapshot(&mut self, snapshot: &Value) {
         if let Some(last_id) = snapshot.get("lastUpdateId").and_then(|v| v.as_u64()) {
             self.last_update_id = last_id;
