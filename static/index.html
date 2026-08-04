@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTCUSDT Scalper Terminal</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --panel: #141414;
+            --text: #e0e0e0;
+            --accent: #00ffcc;
+            --green: #00e676;
+            --red: #ff1744;
+            --border: #333;
+        }
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 15px;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        h2 {
+            margin-top: 0;
+            font-size: 1.1em;
+            color: var(--accent);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 5px;
+        }
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 0.9em;
+        }
+        .up { color: var(--green); }
+        .down { color: var(--red); }
+        .large-val {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        #countdown {
+            font-size: 2em;
+            text-align: center;
+            margin-top: 20px;
+            color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <div class="panel" id="market-panel">
+        <h2>MARKET DATA (BTCUSDT)</h2>
+        <div class="data-row"><span>Price:</span> <span id="btc-price" class="large-val">---</span></div>
+        <div class="data-row"><span>Mark Price:</span> <span id="mark-price">---</span></div>
+        <div class="data-row"><span>Spread:</span> <span id="spread">---</span></div>
+        <div class="data-row"><span>Funding:</span> <span id="funding">---</span></div>
+        <div class="data-row"><span>OBI:</span> <span id="obi" class="large-val">---</span></div>
+        <div class="data-row"><span>CVD:</span> <span id="cvd">---</span></div>
+        <div class="data-row"><span>CVD Slope:</span> <span id="cvd-slope">---</span></div>
+        <div class="data-row"><span>Bid Vol:</span> <span id="bid-vol">---</span></div>
+        <div class="data-row"><span>Ask Vol:</span> <span id="ask-vol">---</span></div>
+    </div>
+
+    <div class="panel" id="position-panel">
+        <h2>ACTIVE POSITION</h2>
+        <div id="no-position">No active position</div>
+        <div id="position-data" style="display: none;">
+            <div class="data-row"><span>Side:</span> <span id="pos-side" class="large-val">---</span></div>
+            <div class="data-row"><span>Entry Price:</span> <span id="pos-entry">---</span></div>
+            <div class="data-row"><span>Current Price:</span> <span id="pos-current">---</span></div>
+            <div class="data-row"><span>Quantity:</span> <span id="pos-qty">---</span></div>
+            <div class="data-row"><span>Unrealized PNL:</span> <span id="pos-pnl">---</span></div>
+            <div id="countdown">10</div>
+        </div>
+    </div>
+
+    <div class="panel" id="system-panel">
+        <h2>SYSTEM STATUS</h2>
+        <div class="data-row"><span>WS Status:</span> <span id="ws-status" class="up">CONNECTING...</span></div>
+        <div class="data-row"><span>Ping:</span> <span id="ping">--- ms</span></div>
+        <div class="data-row"><span>Trades Today:</span> <span id="trades-count">0</span></div>
+        
+        <h3>Recent Liquidations</h3>
+        <div id="liqs"></div>
+    </div>
+    <div class="panel" id="closed-trades-panel" style="grid-column: span 3; max-height: 250px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>RECENT CLOSED TRADES</h2>
+            <h2 style="margin: 0; font-size: 1.1rem;">Total PNL: <span id="total-pnl">0.0000 USDT</span></h2>
+        </div>
+        <table style="width: 100%; text-align: left; border-collapse: collapse;">
+            <thead>
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <th>Side</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>Invested</th>
+                    <th>PNL</th>
+                </tr>
+            </thead>
+            <tbody id="closed-trades-list">
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const ws = new WebSocket(`ws://${window.location.host}/ws`);
+        let lastPing = Date.now();
+
+        ws.onopen = () => {
+            document.getElementById('ws-status').innerText = "CONNECTED";
+            document.getElementById('ws-status').className = "up";
+        };
+
+        ws.onclose = () => {
+            document.getElementById('ws-status').innerText = "DISCONNECTED";
+            document.getElementById('ws-status').className = "down";
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            // Latency calc
+            const now = Date.now();
+            document.getElementById('ping').innerText = `${now - lastPing} ms`;
+            lastPing = now;
+
+            // Market Data
+            const pEl = document.getElementById('btc-price');
+            const oldP = parseFloat(pEl.innerText) || 0;
+            pEl.innerText = data.btc_price.toFixed(2);
+            pEl.className = data.btc_price > oldP ? "large-val up" : (data.btc_price < oldP ? "large-val down" : "large-val");
+
+            document.getElementById('mark-price').innerText = data.mark_price.toFixed(2);
+            document.getElementById('spread').innerText = data.spread.toFixed(2);
+            document.getElementById('funding').innerText = (data.funding * 100).toFixed(4) + '%';
+            
+            const obiEl = document.getElementById('obi');
+            obiEl.innerText = data.obi.toFixed(2);
+            obiEl.className = data.obi > 1.5 ? "large-val up" : (data.obi < 0.67 ? "large-val down" : "large-val");
+
+            document.getElementById('cvd').innerText = data.cvd.toFixed(2);
+            const slopeEl = document.getElementById('cvd-slope');
+            slopeEl.innerText = data.cvd_slope.toFixed(2);
+            slopeEl.className = data.cvd_slope > 0 ? "up" : "down";
+
+            document.getElementById('bid-vol').innerText = data.bid_volume.toFixed(2);
+            document.getElementById('ask-vol').innerText = data.ask_volume.toFixed(2);
+
+            // Position Data
+            if (data.position) {
+                document.getElementById('no-position').style.display = 'none';
+                document.getElementById('position-data').style.display = 'block';
+                
+                const sideEl = document.getElementById('pos-side');
+                sideEl.innerText = data.position.side;
+                sideEl.className = data.position.side === 'LONG' ? "large-val up" : "large-val down";
+                
+                document.getElementById('pos-entry').innerText = data.position.entry_price.toFixed(2);
+                document.getElementById('pos-current').innerText = data.btc_price.toFixed(2);
+                document.getElementById('pos-qty').innerText = data.position.quantity;
+                
+                const pnlEl = document.getElementById('pos-pnl');
+                pnlEl.innerText = data.position.unrealized_pnl.toFixed(4) + ' USDT';
+                pnlEl.className = data.position.unrealized_pnl > 0 ? "up" : "down";
+                
+                document.getElementById('countdown').innerText = data.position.remaining_seconds + "...";
+            } else {
+                document.getElementById('no-position').style.display = 'block';
+                document.getElementById('position-data').style.display = 'none';
+            }
+
+            // Liquidations
+            if (data.liquidations && data.liquidations.length > 0) {
+                const liqHtml = data.liquidations.map(l => {
+                    return `<div class="data-row"><span>${l.S} ${l.q} @ ${l.p}</span></div>`;
+                }).join('');
+                document.getElementById('liqs').innerHTML = liqHtml;
+            }
+            
+            // Total PNL
+            const totalPnlEl = document.getElementById('total-pnl');
+            if (totalPnlEl && data.total_pnl !== undefined) {
+                totalPnlEl.innerText = (data.total_pnl > 0 ? '+' : '') + data.total_pnl.toFixed(4) + ' USDT';
+                totalPnlEl.className = data.total_pnl > 0 ? "up" : (data.total_pnl < 0 ? "down" : "");
+            }
+
+            // Closed Trades
+            if (data.closed_trades && data.closed_trades.length > 0) {
+                const tradesHtml = data.closed_trades.map(t => {
+                    const pnlClass = t.pnl > 0 ? "up" : "down";
+                    const sideClass = t.side === 'LONG' ? "up" : "down";
+                    return `<tr>
+                        <td class="${sideClass}">${t.side}</td>
+                        <td>${t.entry_price.toFixed(2)}</td>
+                        <td>${t.exit_price.toFixed(2)}</td>
+                        <td>$${t.invested.toFixed(2)}</td>
+                        <td class="${pnlClass}">${t.pnl > 0 ? '+' : ''}${t.pnl.toFixed(4)} USDT</td>
+                    </tr>`;
+                }).join('');
+                document.getElementById('closed-trades-list').innerHTML = tradesHtml;
+            }
+        };
+    </script>
+</body>
+</html>
