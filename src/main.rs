@@ -1,6 +1,5 @@
 mod binance;
 mod logger;
-mod orderbook;
 mod strategy;
 
 use axum::{
@@ -77,14 +76,31 @@ async fn ws_handler(
 }
 
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
-    let rx = state.tx.subscribe();
-    let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));
-    
-    loop {
-        interval.tick().await;
-        let state_update = rx.borrow().clone();
-        if let Ok(msg) = serde_json::to_string(&state_update) {
+    let mut rx = state.tx.subscribe();
+
+    // Send an initial snapshot immediately
+    {
+        let snapshot = rx.borrow().clone();
+        if let Ok(msg) = serde_json::to_string(&snapshot) {
             if socket.send(Message::Text(msg)).await.is_err() {
+                return;
+            }
+        }
+    }
+
+    // Then push every update as soon as the watch channel receives one
+    loop {
+        match rx.changed().await {
+            Ok(_) => {
+                let state_update = rx.borrow().clone();
+                if let Ok(msg) = serde_json::to_string(&state_update) {
+                    if socket.send(Message::Text(msg)).await.is_err() {
+                        break;
+                    }
+                }
+            }
+            Err(_) => {
+                // Sender dropped — server shutting down
                 break;
             }
         }

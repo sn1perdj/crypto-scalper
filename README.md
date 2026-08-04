@@ -11,11 +11,12 @@ A local-only automated BTCUSDT spot scalping system demo built in Rust. It featu
 
 ## Strategy Rules
 
-1. **Trade Size**: Simulated $10 USDT at 5x leverage
-2. **Long Entry**: OBI > 1.50 AND CVD slope > 0 AND no existing position.
-3. **Short Entry**: OBI < 0.67 AND CVD slope < 0 AND no existing position.
-4. **Long Exit Rule**: Active LONG position is closed when OBI < 1.20.
-5. **Short Exit Rule**: Active SHORT position is closed when OBI > 0.70.
+1. **Trade Size**: Configurable via `TRADE_SIZE_USDT` & `LEVERAGE` in `.env`.
+2. **Long Entry**: `OBI > OBI_LONG_ENTRY` (default `2.00`) AND `CVD slope > 0`.
+3. **Short Entry**: `OBI < OBI_SHORT_ENTRY` (default `0.50`) AND `CVD slope < 0`.
+4. **Trade Cooldown**: Requires `COOLDOWN_SECONDS` (default `30s`) buffer between trade entries.
+5. **Min Holding Period**: Requires `MIN_HOLDING_SECONDS` (default `5s`) active duration before OBI exits trigger.
+6. **Exit Rules**: Active LONG exits when `OBI < 1.20`, active SHORT exits when `OBI > 0.70`.
 
 ## Setup Instructions
 
